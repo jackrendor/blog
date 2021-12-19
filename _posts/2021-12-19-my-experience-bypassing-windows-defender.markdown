@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "My Experience bypassing Windows Defender"
-date:   2021-19-12 20:14:00 +0100
+date:   2021-12-19 21:35:00 +0100
 categories: [windows, av, bypass, article]
 ---
 

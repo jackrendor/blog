@@ -33,10 +33,12 @@ I know zero about AV evasion. Everything that it's written in this article is ba
 
 ## Directory tree
 
+```
  |-phpuploads
-  |-uploads
+  |-uploads/
   |-index.php
- 
+```
+
 ## Source
 
 ```php
